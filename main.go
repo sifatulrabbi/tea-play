@@ -29,9 +29,13 @@ var (
 	panelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(1, 3).Margin(1, 0).Width(20)
 	errorStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ef4444"))
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e"))
+	inputBoxSt   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(1, 1).Margin(1, 1)
 )
 
 type model struct {
+	height int
+	width  int
+
 	count    int
 	input    textinput.Model
 	response string
@@ -43,8 +47,8 @@ type model struct {
 
 func New() model {
 	ti := textinput.New()
+	ti.Prompt = "❯ "
 	ti.Placeholder = "Type a label and press enter"
-	ti.Width = 20
 	ti.Focus() // focusing by default.
 
 	sp := spinner.New()
@@ -64,6 +68,10 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		return m, nil
+
 	case tickMsg:
 		m.count++
 		return m, tick()
@@ -130,14 +138,17 @@ func (m model) View() string {
 		busyLine = fmt.Sprintf("%s  Processing...", m.spin.View())
 	}
 
+	m.input.Width = max(m.width-4, 1)
+	inputField := inputBoxSt.Width(max(m.width-4, 1)).MaxWidth(m.width).Render(m.input.View())
+
 	controls := helpStyle.Render("Enter: run async task   Esc: clear   /exit: quit")
 
 	return fmt.Sprintf("%s\n\n%s\n\n%s\n%s\n\n%s\n\n%s\n",
 		header,
-		m.input.View(),
 		panel,
 		busyLine,
 		m.status,
+		inputField,
 		controls,
 	)
 }
