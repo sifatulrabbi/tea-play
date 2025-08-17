@@ -8,14 +8,19 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type (
-	resultMsg string
-	errMsg    string
+	errMsg string
 )
+
+type resultMsg struct {
+	userInput string
+	aiReply   string
+}
 
 // ----- Styles -----
 
@@ -41,13 +46,14 @@ type model struct {
 	height int
 	width  int
 
-	input    textinput.Model
-	response string
-
-	spin           spinner.Model
+	response       string
 	busy           bool
 	status         string
 	detailedStatus string
+
+	input    textinput.Model
+	spin     spinner.Model
+	viewport viewport.Model
 }
 
 func New() model {
@@ -56,13 +62,17 @@ func New() model {
 	ti.Placeholder = "Type a label and press enter"
 	ti.Focus() // focusing by default.
 
+	vp := viewport.New(80, 20)
+	vp.MouseWheelEnabled = true
+
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 
 	return model{
 		input:          ti,
 		spin:           sp,
-		response:       "Counter",
+		viewport:       vp,
+		response:       "",
 		status:         "",
 		detailedStatus: "",
 	}
@@ -101,6 +111,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.busy = true
 			m.status = "Invoking LLM model..."
+			m.viewport.SetContent(fmt.Sprintf("USER: %s\nAI: ", val))
 			return m, tea.Batch(m.spin.Tick, doWork(val))
 		}
 
@@ -114,8 +125,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case resultMsg:
 		m.busy = false
-		m.response = string(msg)
 		m.status = successSt.Render("Done!")
+		m.viewport.SetContent(fmt.Sprintf("USER: %s\nAI: %s", msg.userInput, msg.aiReply))
 		return m, nil
 
 	case errMsg:
@@ -125,9 +136,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	var inputCmd, viewportCmd tea.Cmd
+	m.input, inputCmd = m.input.Update(msg)
+	m.viewport, viewportCmd = m.viewport.Update(msg)
+	return m, tea.Batch(inputCmd, viewportCmd)
 }
 
 func (m model) View() string {
@@ -152,7 +164,7 @@ func (m model) View() string {
 		Height(remainingEmptySpaces).
 		Width(maxContentWidth).
 		Background(lipgloss.Color("#333")).
-		Render()
+		Render(m.viewport.View())
 
 	finalView := lipgloss.NewStyle().
 		Padding(ROOT_PADDING_Y, ROOT_PADDING_X).
@@ -169,20 +181,13 @@ func (m model) View() string {
 	return finalView
 }
 
-// func hrInAccent(width int) string {
-// 	line := strings.Repeat("─", width)
-// 	return lipgloss.NewStyle().
-// 		Foreground(accent).
-// 		Render(line)
-// }
-
 func doWork(s string) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(2 * time.Second)
 		if strings.TrimSpace(s) == "" {
 			return errMsg(fmt.Errorf("input was empty").Error())
 		}
-		return resultMsg(strings.ToUpper(s))
+		return resultMsg{s, "Fake AI response for now!"}
 	}
 }
 
